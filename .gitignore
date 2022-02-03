@@ -1,4 +1,4 @@
-*.DS_Store
+﻿*.DS_Store
 *.swp
 *.pyc
 version.py
@@ -11,3 +11,6 @@ encoding.egg-info/
 *.o
 *.so
 *.ninja*
+venv/
+datasets/
+

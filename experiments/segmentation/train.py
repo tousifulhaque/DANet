@@ -10,12 +10,13 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 
+
 import torch
 from torch.utils import data
 import torchvision.transforms as transform
 from torch.nn.parallel.scatter_gather import gather
-
 import encoding.utils as utils
+from torch.nn import BatchNorm2d
 from encoding.nn import SegmentationLosses, SyncBatchNorm
 from encoding.parallel import DataParallelModel, DataParallelCriterion
 from encoding.datasets import get_dataset
@@ -100,11 +101,14 @@ class Options():
                             help="multi grid dilation list")
         parser.add_argument('--os', type=int, default=8,
                             help='output stride default:8')
+        parser.add_argument('--no-deepstem', action="store_true", default=False,
+                    help='backbone without deepstem')                    
         # the parser
         self.parser = parser
 
     def parse(self):
         args = self.parser.parse_args()
+
         args.cuda = not args.no_cuda and torch.cuda.is_available()
         # default settings for epochs, batch_size and lr
         if args.epochs is None:
@@ -127,7 +131,7 @@ class Options():
                 'citys': 0.004,
             }
             args.lr = lrs[args.dataset.lower()] / 16 * args.batch_size
-        print(args)
+        
         return args
 
 
@@ -152,15 +156,15 @@ class Trainer():
                                          drop_last=False, shuffle=False, **kwargs)
         self.nclass = trainset.num_class
         # model
-        model = get_segmentation_model(args.model, dataset=args.dataset,
+        model = get_segmentation_model(args.model, no_deepstem = args.no_deepstem, dataset=args.dataset,
                                        backbone = args.backbone, aux = args.aux,
-                                       se_loss = args.se_loss, norm_layer = SyncBatchNorm,
+                                       se_loss = args.se_loss, norm_layer = BatchNorm2d,
                                        base_size=args.base_size, crop_size=args.crop_size,
                                        multi_grid=args.multi_grid,
                                        multi_dilation=args.multi_dilation,
                                        os=args.os)
-        print(model)
         # optimizer using different LR
+
         params_list = [{'params': model.pretrained.parameters(), 'lr': args.lr},]
         if hasattr(model, 'head'):
             params_list.append({'params': model.head.parameters(), 'lr': args.lr*10})
@@ -206,11 +210,12 @@ class Trainer():
         train_loss = 0.0
         self.model.train()
         tbar = tqdm(self.trainloader)
+        
         for i, (image, target) in enumerate(tbar):
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
             outputs = self.model(image)
-            loss = self.criterion(outputs, target)
+            loss = self.criterion(outputs[0], target)
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
