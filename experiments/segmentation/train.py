@@ -118,7 +118,7 @@ class Options():
                 'pascal_voc': 50,
                 'pcontext': 80,
                 'ade20k': 180,
-                'citys': 240,
+                'citys': 2,
             }
             args.epochs = epoches[args.dataset.lower()]
         if args.lr is None:
@@ -164,6 +164,7 @@ class Trainer():
                                        multi_dilation=args.multi_dilation,
                                        os=args.os)
         # optimizer using different LR
+        print(model)
 
         params_list = [{'params': model.pretrained.parameters(), 'lr': args.lr},]
         if hasattr(model, 'head'):
@@ -237,7 +238,7 @@ class Trainer():
         def eval_batch(model, image, target):
             outputs = model(image)
             outputs = gather(outputs, 0, dim=0)
-            pred = outputs[0]
+            pred = outputs
             target = target.cuda()
             correct, labeled = utils.batch_pix_accuracy(pred.data, target)
             inter, union = utils.batch_intersection_union(pred.data, target, self.nclass)
